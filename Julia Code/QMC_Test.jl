@@ -1,10 +1,12 @@
 using Random, Distributions,  XLSX, DataFrames, Plots,  CSV, QuasiMonteCarlo
 
-base = XLSX.readdata("Database.xlsx", "Sheet1!B2:N1339")
-dados = Matrix{Float64}(base[:, [4, end]])
+base = XLSX.readdata("D:\\IME Q2 - ADR Artigo\\Insurance-Mathematics-Economics-ADR-\\Databases\\Database.xlsx", "Sheet1!B2:K1339")
+dados = Matrix{Float64}(base[:, [7, end]])
 
+# We order the charges column
 ordered_y = sort(dados[:, 1])
 
+# Cummulative distribution
 Fy = zeros(length(ordered_y))
 for i in 1:1338 
     Fy[i] = i/1338
@@ -66,8 +68,8 @@ plot!(n,qmc_mean_std_latin,  label = "QMC - LatinHypercubeSample")
 plot!(n, qmc_mean_std_lattice, label = "QMC - LatticeRuleSample")
 ylabel!("Variância")
 xlabel!("Tamanho da amostra")
+savefig(p1, "Julia Code\\Results\\teste_QMC.png")
 
 var(rand(Uniform(minimum(Fy),1), n[j]))
 var(QMC_sampling)
 
-savefig(p1, "teste_QMC.png")
