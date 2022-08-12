@@ -143,26 +143,3 @@ mc_base, qmc_base, pvalue_base, prop_base = compare_dist(dados[:, 1],dados[:, 2]
 
 
 
-
-
-p1 = plot(cluster0_ordered_y, cluster0_Fy)
-
-for i in 1:length(n)
-plot!(p1, sample["MC"][""])
-
-end
-
-
-
-p1 = plot(n,mc_mean_std, colour = "black", label = "Monte Carlo")
-plot!(n,qmc_mean_std_unif, label = "QMC - Uniforme")
-#plot!(qmc_mean_std_sobol)
-plot!(n,qmc_mean_std_latin,  label = "QMC - LatinHypercubeSample")
-plot!(n, qmc_mean_std_lattice, label = "QMC - LatticeRuleSample")
-ylabel!("Variância")
-xlabel!("Tamanho da amostra")
-
-var(rand(Uniform(minimum(Fy),1), n[j]))
-var(QMC_sampling)
-
-savefig(p1, "teste_QMC.png")
