@@ -83,9 +83,9 @@ function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample:
     end
 end
 
-base_v1 = XLSX.readdata("Databases/Database.xlsx", "Sheet1!B2:H1339")
+base_v1 = XLSX.readdata("Databases/Database.xlsx", "Sheet1!B2:L1339")
 base_v2 = CSV.read("Databases/contracts.csv", DataFrame)
-dados = Matrix{Float64}(base_v1[:, [7]])
+dados = Matrix{Float64}(base_v1[:, [7, 10]])
 
 ordered_y = sort(dados[:, 1])
 
@@ -196,7 +196,7 @@ mc_c3, qmc_c3, c3_pvalue, c3_prop = compare_dist(cluster3[:, 1],Vector{Float64}(
 mc_c4, qmc_c4, c4_pvalue, c4_prop = compare_dist(cluster4[:, 1],Vector{Float64}(base_v2[:, 6]), sample, 4.0, "v2", n)
 mc_c5, qmc_c5, c5_pvalue, c5_prop = compare_dist(cluster5[:, 1],Vector{Float64}(base_v2[:, 6]), sample, 5.0,"v2", n)
 mc_c6, qmc_c6, c6_pvalue, c6_prop = compare_dist(cluster6[:, 1],Vector{Float64}(base_v2[:, 6]), sample, 6.0, "v2", n)
-mc_c7, qmc_c7, c7_pvalue, c7_prop= compare_dist(cluster7[:, 1],Vector{Float64}(base_v2[:, 6]), sample, 7.0,"v2", n)
+mc_c7, qmc_c7, c7_pvalue, c7_prop = compare_dist(cluster7[:, 1],Vector{Float64}(base_v2[:, 6]), sample, 7.0,"v2", n)
 
 #Checking if the distributions of each cluster differ from other using KS-test
 cst = Vector{Float64}(collect(0:7))
@@ -217,3 +217,10 @@ for i in cst
     n = 0
 end
 
+# Questions
+# How many samples must we extract to get convergence for each cluster
+# If we compare distributions from categorical clustering and k-means algorithm, KS-Test provides a p-value
+# Or we can use Kullback Leibler Divergence for distributions
+# I need a relatory of the results
+# Reason for this warning, is it safe to ignore?
+# This test is inaccurate with ties
