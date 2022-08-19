@@ -1,9 +1,9 @@
 using Random, Distributions,  XLSX, DataFrames, Plots,  CSV, QuasiMonteCarlo, HypothesisTests
 
-#Ths function receives the charges of a cluster, a vector of the real cluster of the data, the dict of samples, the cluster that you want to analysis, 
+#This function receives the charges of a cluster, a vector of the real cluster of the data, the dict of samples, the cluster that you want to analysis, 
 # the version of the cluster classification (v0 - algorithm based, v1 - smoker, v2 - smoker, BMI, age) and the size os the samples.
 
-#The ideia is to return plots comparing the samples distributions and teh real distribution.
+#The ideia is to return plots comparing the samples distributions and the real distribution.
 function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample::Dict, cluster::Union{Float64,String}, version::String, n::Vector{Int64})
 
     #criando a distribuicao acumulada de ylabel
@@ -83,9 +83,9 @@ function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample:
     end
 end
 
-base_v1 = XLSX.readdata("Databases/Database.xlsx", "Sheet1!B2:O1339")
+base_v1 = XLSX.readdata("Databases/Database.xlsx", "Sheet1!B2:H1339")
 base_v2 = CSV.read("Databases/contracts.csv", DataFrame)
-dados = Matrix{Float64}(base_v1[:, [4, end-1]])
+dados = Matrix{Float64}(base_v1[:, [7]])
 
 ordered_y = sort(dados[:, 1])
 
@@ -139,13 +139,13 @@ for j in 1:length(n)
 
         MC_sample[i] = ordered_y[mc_idx] #obtaining the value sampled by Monte carlo
         MC_cluster_v0[i] = dados[findall(m -> m == MC_sample[i], dados[:, 1])[1],2] #obtaining the cluster of the sampled value by Monte carlo
-        MC_cluster_v1[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],7]#obtaining the cluster of the sampled value by Monte carlo
-        MC_cluster_v2[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],6]#obtaining the cluster of the sampled value by Monte carlo
+        MC_cluster_v1[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],7] #obtaining the cluster of the sampled value by Monte carlo
+        MC_cluster_v2[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],6] #obtaining the cluster of the sampled value by Monte carlo
     
         QMC_sample_latin[i] = ordered_y[qmc_idx_latin]
-        QMC_cluster_v0_latin[i] = dados[findall(m -> m == QMC_sample_latin[i], dados[:, 1])[1],2]#obtaining the cluster of the sampled value by Quasi-Monte carlo
-        QMC_cluster_v1_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],7]#obtaining the cluster of the sampled value by Quasi-Monte carlo
-        QMC_cluster_v2_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],6]#obtaining the cluster of the sampled value by Quasi-Monte carlo
+        QMC_cluster_v0_latin[i] = dados[findall(m -> m == QMC_sample_latin[i], dados[:, 1])[1],2] #obtaining the cluster of the sampled value by Quasi-Monte carlo
+        QMC_cluster_v1_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],7] #obtaining the cluster of the sampled value by Quasi-Monte carlo
+        QMC_cluster_v2_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],6] #obtaining the cluster of the sampled value by Quasi-Monte carlo
     end
     sample["MC"]["value"][n[j]] = MC_sample
     sample["MC"]["cluster"]["v0"][n[j]] = MC_cluster_v0
