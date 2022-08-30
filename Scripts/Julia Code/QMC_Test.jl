@@ -87,8 +87,6 @@ base_v1 = CSV.read("Databases/Database.csv", DataFrame)
 base_v2 = CSV.read("Databases/contracts.csv", DataFrame)
 dados = Matrix{Float64}(base_v1[:, [7, 10]])
 
-ordered_y = sort(dados[:, 1])
-
 function CDF(random_variable::Vector{Float64})
     ordered_y = sort(random_variable)
     Fy = zeros(length(ordered_y))
