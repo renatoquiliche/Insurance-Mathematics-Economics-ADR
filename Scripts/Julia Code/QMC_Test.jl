@@ -1,6 +1,6 @@
 using Random, Distributions,  XLSX, DataFrames, Plots,  CSV, QuasiMonteCarlo, HypothesisTests
 
-#This function receives the charges of a cluster, a vector of the real cluster of the data, the dict of samples, the cluster that you want to analysis, 
+#This function receives the charges of a cluster, a vector of the real cluster of the data, the dict of samples, the cluster that you want to analysis,
 # the version of the cluster classification (v0 - algorithm based, v1 - smoker, v2 - smoker, BMI, age) and the size os the samples.
 
 #The ideia is to return plots comparing the samples distributions and the real distribution.
@@ -9,7 +9,7 @@ function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample:
     #criando a distribuicao acumulada de ylabel
     ordered_y = sort(y)
     Fy = zeros(length(ordered_y))
-    for i in 1:length(y) 
+    for i in 1:length(y)
         Fy[i] = i/length(y)
     end
 
@@ -58,7 +58,7 @@ function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample:
 
         mc_p = plot!(mc_p, mc_y, mc_fy, label = "n = $i", legend = false)
         qmc_p = plot!(qmc_p, qmc_y, qmc_fy,label = "n = $i", legend = false)
-       
+
         if cluster != "base"
             mc_prop[j] = sum(sample["MC"]["cluster"][version][i] .== cluster) / i
             qmc_prop[j] = sum(sample["QMC"]["cluster"][version][i] .== cluster) / i
@@ -76,23 +76,30 @@ function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample:
                 plot!(n, qmc_prop, label = "QMC", legend = :bottomright)
                 hline!(n, [prop_real], label = "Real Prop.", colour = "black")
                 title!("Proportion convergence")
-        
+
         return mc_p, qmc_p, pvalue_p, prop_p
     else
         return mc_p, qmc_p, pvalue_p, nothing
     end
 end
 
-base_v1 = XLSX.readdata("Databases/Database.xlsx", "Sheet1!B2:L1339")
+base_v1 = CSV.read("Databases/Database.csv", DataFrame)
 base_v2 = CSV.read("Databases/contracts.csv", DataFrame)
 dados = Matrix{Float64}(base_v1[:, [7, 10]])
 
 ordered_y = sort(dados[:, 1])
 
-Fy = zeros(length(ordered_y))
-for i in 1:1338 
-    Fy[i] = i/1338
+function CDF(random_variable::Vector{Float64})
+    ordered_y = sort(random_variable)
+    Fy = zeros(length(ordered_y))
+    for i in 1:1338
+        Fy[i] = i/1338
+    end
+    hist = histogram(random_variable, label="Charges")
+    return ordered_y, Fy, hist
 end
+
+ordered_y, Fy, hist_charges = CDF(dados[:, 1])
 
 sample = Dict()
 sample["MC"] = Dict()
@@ -113,11 +120,13 @@ seed_mc = rand(collect(1:1000), 20) #seeds used in the Monte carlo sampling
 Random.seed!(321)
 seed_qmc = rand(collect(1:1000), 20) #seeds used in the Quasi-Monte carlo sampling
 
+#Grid of the sample sizes to analyze simulations
 n = collect(100:100:2000)
 
 for j in 1:length(n)
 
     println("j = $j")
+    println("Sample size: ", n[j])
     MC_sample = zeros(n[j])
     MC_cluster_v0 = zeros(n[j]) #cluster by algorithm
     MC_cluster_v1 = zeros(n[j]) #cluster by smoker variable
@@ -131,22 +140,25 @@ for j in 1:length(n)
     Random.seed!(seed_mc[j])
     MC_idx = rand(Uniform(minimum(Fy),1), n[j])
     Random.seed!(seed_qmc[j])
-    QMC_idx_latin = QuasiMonteCarlo.sample(n[j],minimum(Fy),1,LatinHypercubeSample())
-    
+    QMC_idx_latin = QuasiMonteCarlo.sample(n[j],minimum(Fy),1,LatinHypercubeSample(threading=true))
+
+    #Foreach i (point in sample for batch j), get the n[i] samples using MC and QMC, also get the clusters v0, v1 and v1 to which they belong
     for i in 1:n[j]
-        mc_idx = maximum(findall(k -> k <= MC_idx[i], Fy)) #obtaining the index of sampled value in the real cumulative distribution 
-        qmc_idx_latin = maximum(findall(k -> k <= QMC_idx_latin[i], Fy)) #obtaining the index of sampled value in the real cumulative distribution 
+        mc_idx = maximum(findall(k -> k <= MC_idx[i], Fy)) #obtaining the index of sampled value in the real cumulative distribution CDF
+        qmc_idx_latin = maximum(findall(k -> k <= QMC_idx_latin[i], Fy)) #obtaining the index of sampled value in the real cumulative distribution
 
         MC_sample[i] = ordered_y[mc_idx] #obtaining the value sampled by Monte carlo
         MC_cluster_v0[i] = dados[findall(m -> m == MC_sample[i], dados[:, 1])[1],2] #obtaining the cluster of the sampled value by Monte carlo
         MC_cluster_v1[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],7] #obtaining the cluster of the sampled value by Monte carlo
         MC_cluster_v2[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],6] #obtaining the cluster of the sampled value by Monte carlo
-    
+
         QMC_sample_latin[i] = ordered_y[qmc_idx_latin]
         QMC_cluster_v0_latin[i] = dados[findall(m -> m == QMC_sample_latin[i], dados[:, 1])[1],2] #obtaining the cluster of the sampled value by Quasi-Monte carlo
         QMC_cluster_v1_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],7] #obtaining the cluster of the sampled value by Quasi-Monte carlo
         QMC_cluster_v2_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],6] #obtaining the cluster of the sampled value by Quasi-Monte carlo
     end
+
+
     sample["MC"]["value"][n[j]] = MC_sample
     sample["MC"]["cluster"]["v0"][n[j]] = MC_cluster_v0
     sample["MC"]["cluster"]["v1"][n[j]] = MC_cluster_v1
@@ -224,3 +236,34 @@ end
 # I need a relatory of the results
 # Reason for this warning, is it safe to ignore?
 # This test is inaccurate with ties
+
+"""
+TO TEST
+
+i = 100
+j = 1
+version = "v0"
+cluster = 0
+real_cluster = dados[:, 2]
+
+mc_pvalue = zeros(length(n))
+qmc_pvalue = zeros(length(n))
+
+mc_prop = zeros(length(n))
+qmc_prop = zeros(length(n))
+
+prop_real = sum(real_cluster .== cluster) / length(real_cluster)
+
+for i in n
+    mc_prop[j] = sum(sample["MC"]["cluster"][version][i] .== cluster) / i
+    qmc_prop[j] = sum(sample["QMC"]["cluster"][version][i] .== cluster) / i
+    j += 1
+end
+
+c0_prop
+
+"""
+
+# Whether or not a sample from a population represents the true proportion from the entire population.
+# The true proportion is given by clustering algorithm and it is tested versus the simulation approach
+# Given a sample size n, the proportion sampled for cluster0 is equal to the actual proportion of cluster0?
