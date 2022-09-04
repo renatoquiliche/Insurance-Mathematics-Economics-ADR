@@ -1,4 +1,4 @@
-charges,Age,BMI,smoker,Multiple Contracts,Four Contracts,Cluster K=8,Cluster K=2,Cluster Four Contracts (Smoker + BMI)
+charges,Age,BMI,smoker,Multiple Contracts,Four Contracts,Cluster K=8,Cluster_smoker,Cluster_smoker_bmi
 16884.924,Adult (60-),Non-obesity(BMI<30),Smoker,Adult (60-) AND Non-obesity(BMI<30) AND Smoker,Non-obesity(BMI<30) AND Smoker,1,1,1
 1725.5523,Adult (60-),Obesity (BMI>30),Non - Smoker,Adult (60-) AND Obesity (BMI>30) AND Non - Smoker,Obesity (BMI>30) AND Non - Smoker,2,0,2
 4449.462,Adult (60-),Obesity (BMI>30),Non - Smoker,Adult (60-) AND Obesity (BMI>30) AND Non - Smoker,Obesity (BMI>30) AND Non - Smoker,2,0,2
