@@ -1,6 +1,6 @@
 using Random, Distributions,  XLSX, DataFrames, Plots,  CSV, QuasiMonteCarlo, HypothesisTests, Statistics
 
-#Ths function receives the charges of a cluster, a vector of the real cluster of the data, the dict of samples, the cluster that you want to analysis, 
+#Ths function receives the charges of a cluster, a vector of the real cluster of the data, the dict of samples, the cluster that you want to analysis,
 # the version of the cluster classification (v0 - algorithm based, v1 - smoker, v2 - smoker, BMI, age) and the size os the samples.
 
 #The ideia is to return plots comparing the samples distributions and teh real distribution.
@@ -9,7 +9,7 @@ function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample:
     #criando a distribuicao acumulada de ylabel
     ordered_y = sort(y)
     Fy = zeros(length(ordered_y))
-    for i in 1:length(y) 
+    for i in 1:length(y)
         Fy[i] = i/length(y)
     end
 
@@ -58,7 +58,7 @@ function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample:
 
         mc_p = plot!(mc_p, mc_y, mc_fy, label = "n = $i", legend = false)
         qmc_p = plot!(qmc_p, qmc_y, qmc_fy,label = "n = $i", legend = false)
-       
+
         if cluster != "base"
             mc_prop[j] = sum(sample["MC"]["cluster"][version][i] .== cluster) / i
             qmc_prop[j] = sum(sample["QMC"]["cluster"][version][i] .== cluster) / i
@@ -76,7 +76,7 @@ function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample:
                 plot!(n, qmc_prop, label = "QMC", legend = :bottomright)
                 hline!(n, [prop_real], label = "Real Prop.", colour = "black")
                 title!("Proportion convergence")
-        
+
         return mc_p, qmc_p, pvalue_p, prop_p
     else
         return mc_p, qmc_p, pvalue_p, nothing
@@ -90,7 +90,7 @@ dados = Matrix{Float64}(base_v1[:, [4, end-1]])
 ordered_y = sort(dados[:, 1])
 
 Fy = zeros(length(ordered_y))
-for i in 1:1338 
+for i in 1:1338
     Fy[i] = i/1338
 end
 
@@ -143,13 +143,13 @@ for s in 1:10
         QMC_sd1[s,j] = std(QMC_idx_latin)
 
         for i in 1:n[j]
-            
+
             if MC_idx[i] < Fy[1]
                 mc_idx = 1
             else
                 mc_idx = maximum(findall(k -> k <= MC_idx[i], Fy)) #obtaining the index of sampled value in the real cumulative distribution
-            end 
-            
+            end
+
             if QMC_idx_latin[i] < Fy[1]
                 qmc_idx_latin = 1
             else
@@ -158,13 +158,13 @@ for s in 1:10
 
             MC_sample[i] = ordered_y[mc_idx] #obtaining the value sampled by Monte carlo
             MC_cluster_v0[i] = dados[findall(m -> m == MC_sample[i], dados[:, 1])[1],2] #obtaining the cluster of the sampled value by Monte carlo
-            MC_cluster_v1[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],7]#obtaining the cluster of the sampled value by Monte carlo
-            MC_cluster_v2[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],6]#obtaining the cluster of the sampled value by Monte carlo
-        
+            MC_cluster_v1[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],7] #obtaining the cluster of the sampled value by Monte carlo
+            MC_cluster_v2[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],6] #obtaining the cluster of the sampled value by Monte carlo
+
             QMC_sample_latin[i] = ordered_y[qmc_idx_latin]
-            QMC_cluster_v0_latin[i] = dados[findall(m -> m == QMC_sample_latin[i], dados[:, 1])[1],2]#obtaining the cluster of the sampled value by Quasi-Monte carlo
-            QMC_cluster_v1_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],7]#obtaining the cluster of the sampled value by Quasi-Monte carlo
-            QMC_cluster_v2_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],6]#obtaining the cluster of the sampled value by Quasi-Monte carlo
+            QMC_cluster_v0_latin[i] = dados[findall(m -> m == QMC_sample_latin[i], dados[:, 1])[1],2] #obtaining the cluster of the sampled value by Quasi-Monte carlo
+            QMC_cluster_v1_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],7] #obtaining the cluster of the sampled value by Quasi-Monte carlo
+            QMC_cluster_v2_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],6] #obtaining the cluster of the sampled value by Quasi-Monte carlo
         end
         sample["MC"]["value"][n[j]] = MC_sample
         sample["MC"]["cluster"]["v0"][n[j]] = MC_cluster_v0
