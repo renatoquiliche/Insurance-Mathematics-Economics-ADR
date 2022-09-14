@@ -1,15 +1,15 @@
-using Random, Distributions,  XLSX, DataFrames, Plots,  CSV, QuasiMonteCarlo, HypothesisTests
+using Random, Distributions,  XLSX, DataFrames, Plots,  CSV, QuasiMonteCarlo, HypothesisTests, Statistics
 
-#This function receives the charges of a cluster, a vector of the real cluster of the data, the dict of samples, the cluster that you want to analysis,
+#Ths function receives the charges of a cluster, a vector of the real cluster of the data, the dict of samples, the cluster that you want to analysis, 
 # the version of the cluster classification (v0 - algorithm based, v1 - smoker, v2 - smoker, BMI, age) and the size os the samples.
 
-#The ideia is to return plots comparing the samples distributions and the real distribution.
+#The ideia is to return plots comparing the samples distributions and teh real distribution.
 function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample::Dict, cluster::Union{Float64,String}, version::String, n::Vector{Int64})
 
     #criando a distribuicao acumulada de ylabel
     ordered_y = sort(y)
     Fy = zeros(length(ordered_y))
-    for i in 1:length(y)
+    for i in 1:length(y) 
         Fy[i] = i/length(y)
     end
 
@@ -58,7 +58,7 @@ function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample:
 
         mc_p = plot!(mc_p, mc_y, mc_fy, label = "n = $i", legend = false)
         qmc_p = plot!(qmc_p, qmc_y, qmc_fy,label = "n = $i", legend = false)
-
+       
         if cluster != "base"
             mc_prop[j] = sum(sample["MC"]["cluster"][version][i] .== cluster) / i
             qmc_prop[j] = sum(sample["QMC"]["cluster"][version][i] .== cluster) / i
@@ -76,28 +76,23 @@ function compare_dist(y::Vector{Float64}, real_cluster::Vector{Float64}, sample:
                 plot!(n, qmc_prop, label = "QMC", legend = :bottomright)
                 hline!(n, [prop_real], label = "Real Prop.", colour = "black")
                 title!("Proportion convergence")
-
+        
         return mc_p, qmc_p, pvalue_p, prop_p
     else
         return mc_p, qmc_p, pvalue_p, nothing
     end
 end
 
-base_v1 = CSV.read("Databases/Database.csv", DataFrame)
+base_v1 = XLSX.readdata("Databases/Database.xlsx", "Sheet1!B2:O1339")
 base_v2 = CSV.read("Databases/contracts.csv", DataFrame)
-dados = Matrix{Float64}(base_v1[:, [7, 10]])
+dados = Matrix{Float64}(base_v1[:, [4, end-1]])
 
-function CDF(random_variable::Vector{Float64})
-    ordered_y = sort(random_variable)
-    Fy = zeros(length(ordered_y))
-    for i in 1:1338
-        Fy[i] = i/1338
-    end
-    hist = histogram(random_variable, label="Charges")
-    return ordered_y, Fy, hist
+ordered_y = sort(dados[:, 1])
+
+Fy = zeros(length(ordered_y))
+for i in 1:1338 
+    Fy[i] = i/1338
 end
-
-ordered_y, Fy, hist_charges = CDF(dados[:, 1])
 
 sample = Dict()
 sample["MC"] = Dict()
@@ -113,58 +108,103 @@ sample["QMC"]["cluster"]["v0"] = Dict()
 sample["QMC"]["cluster"]["v1"] = Dict()
 sample["QMC"]["cluster"]["v2"] = Dict()
 
-Random.seed!(123)
-seed_mc = rand(collect(1:1000), 20) #seeds used in the Monte carlo sampling
-Random.seed!(321)
-seed_qmc = rand(collect(1:1000), 20) #seeds used in the Quasi-Monte carlo sampling
+#Random.seed!(123)
+#seed_mc = rand(collect(1:1000), 20) #seeds used in the Monte carlo sampling
+#Random.seed!(321)
+#seed_qmc = rand(collect(1:1000), 20) #seeds used in the Quasi-Monte carlo sampling
 
-#Grid of the sample sizes to analyze simulations
+MC_sd1 = zeros(10,20)
+QMC_sd1 = zeros(10,20)
+
+MC_sd2 = zeros(10,20)
+QMC_sd2 = zeros(10,20)
+
 n = collect(100:100:2000)
 
-for j in 1:length(n)
+for s in 1:10
+    for j in 1:length(n)
 
-    println("j = $j")
-    println("Sample size: ", n[j])
-    MC_sample = zeros(n[j])
-    MC_cluster_v0 = zeros(n[j]) #cluster by algorithm
-    MC_cluster_v1 = zeros(n[j]) #cluster by smoker variable
-    MC_cluster_v2 = zeros(n[j]) #cluster by smoder, BMI and age variables
+        println("j = $j")
+        MC_sample = zeros(n[j])
+        MC_cluster_v0 = zeros(n[j]) #cluster by algorithm
+        MC_cluster_v1 = zeros(n[j]) #cluster by smoker variable
+        MC_cluster_v2 = zeros(n[j]) #cluster by smoder, BMI and age variables
 
-    QMC_sample_latin = zeros(n[j])
-    QMC_cluster_v0_latin = zeros(n[j])
-    QMC_cluster_v1_latin = zeros(n[j])
-    QMC_cluster_v2_latin = zeros(n[j])
+        QMC_sample_latin = zeros(n[j])
+        QMC_cluster_v0_latin = zeros(n[j])
+        QMC_cluster_v1_latin = zeros(n[j])
+        QMC_cluster_v2_latin = zeros(n[j])
 
-    Random.seed!(seed_mc[j])
-    MC_idx = rand(Uniform(minimum(Fy),1), n[j])
-    Random.seed!(seed_qmc[j])
-    QMC_idx_latin = QuasiMonteCarlo.sample(n[j],minimum(Fy),1,LatinHypercubeSample(threading=true))
+        #Random.seed!(seed_mc[j])
+        MC_idx = rand(Uniform(0,1), n[j])
+        MC_sd1[s,j] = std(MC_idx)
+        #Random.seed!(seed_qmc[j])
+        QMC_idx_latin = QuasiMonteCarlo.sample(n[j],0,1,LatinHypercubeSample())
+        QMC_sd1[s,j] = std(QMC_idx_latin)
 
-    #Foreach i (point in sample for batch j), get the n[i] samples using MC and QMC, also get the clusters v0, v1 and v1 to which they belong
-    for i in 1:n[j]
-        mc_idx = maximum(findall(k -> k <= MC_idx[i], Fy)) #obtaining the index of sampled value in the real cumulative distribution CDF
-        qmc_idx_latin = maximum(findall(k -> k <= QMC_idx_latin[i], Fy)) #obtaining the index of sampled value in the real cumulative distribution
+        for i in 1:n[j]
+            
+            if MC_idx[i] < Fy[1]
+                mc_idx = 1
+            else
+                mc_idx = maximum(findall(k -> k <= MC_idx[i], Fy)) #obtaining the index of sampled value in the real cumulative distribution
+            end 
+            
+            if QMC_idx_latin[i] < Fy[1]
+                qmc_idx_latin = 1
+            else
+                qmc_idx_latin = maximum(findall(k -> k <= QMC_idx_latin[i], Fy)) #obtaining the index of sampled value in the real cumulative distribution
+            end
 
-        MC_sample[i] = ordered_y[mc_idx] #obtaining the value sampled by Monte carlo
-        MC_cluster_v0[i] = dados[findall(m -> m == MC_sample[i], dados[:, 1])[1],2] #obtaining the cluster of the sampled value by Monte carlo
-        MC_cluster_v1[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],7] #obtaining the cluster of the sampled value by Monte carlo
-        MC_cluster_v2[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],6] #obtaining the cluster of the sampled value by Monte carlo
+            MC_sample[i] = ordered_y[mc_idx] #obtaining the value sampled by Monte carlo
+            MC_cluster_v0[i] = dados[findall(m -> m == MC_sample[i], dados[:, 1])[1],2] #obtaining the cluster of the sampled value by Monte carlo
+            MC_cluster_v1[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],7]#obtaining the cluster of the sampled value by Monte carlo
+            MC_cluster_v2[i] = base_v2[findall(m -> m == MC_sample[i], base_v2[:, 1])[1],6]#obtaining the cluster of the sampled value by Monte carlo
+        
+            QMC_sample_latin[i] = ordered_y[qmc_idx_latin]
+            QMC_cluster_v0_latin[i] = dados[findall(m -> m == QMC_sample_latin[i], dados[:, 1])[1],2]#obtaining the cluster of the sampled value by Quasi-Monte carlo
+            QMC_cluster_v1_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],7]#obtaining the cluster of the sampled value by Quasi-Monte carlo
+            QMC_cluster_v2_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],6]#obtaining the cluster of the sampled value by Quasi-Monte carlo
+        end
+        sample["MC"]["value"][n[j]] = MC_sample
+        sample["MC"]["cluster"]["v0"][n[j]] = MC_cluster_v0
+        sample["MC"]["cluster"]["v1"][n[j]] = MC_cluster_v1
+        sample["MC"]["cluster"]["v2"][n[j]] = MC_cluster_v2
+        sample["QMC"]["value"][n[j]] = QMC_sample_latin
+        sample["QMC"]["cluster"]["v0"][n[j]] = QMC_cluster_v0_latin
+        sample["QMC"]["cluster"]["v1"][n[j]] = QMC_cluster_v1_latin
+        sample["QMC"]["cluster"]["v2"][n[j]] = QMC_cluster_v2_latin
 
-        QMC_sample_latin[i] = ordered_y[qmc_idx_latin]
-        QMC_cluster_v0_latin[i] = dados[findall(m -> m == QMC_sample_latin[i], dados[:, 1])[1],2] #obtaining the cluster of the sampled value by Quasi-Monte carlo
-        QMC_cluster_v1_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],7] #obtaining the cluster of the sampled value by Quasi-Monte carlo
-        QMC_cluster_v2_latin[i] = base_v2[findall(m -> m == QMC_sample_latin[i], base_v2[:, 1])[1],6] #obtaining the cluster of the sampled value by Quasi-Monte carlo
+        MC_sd2[s,j] = std(MC_sample)
+        QMC_sd2[s,j] = std(QMC_sample_latin)
     end
+end
 
+#Montando gráficos...
+p1 = scatter(collect(100:100:2000), MC_sd1[1,:], color = "red", legend = false)
+title!("Monte Carlo - sample scale")
+xaxis!("Sample size")
+yaxis!("Standard deviation")
 
-    sample["MC"]["value"][n[j]] = MC_sample
-    sample["MC"]["cluster"]["v0"][n[j]] = MC_cluster_v0
-    sample["MC"]["cluster"]["v1"][n[j]] = MC_cluster_v1
-    sample["MC"]["cluster"]["v2"][n[j]] = MC_cluster_v2
-    sample["QMC"]["value"][n[j]] = QMC_sample_latin
-    sample["QMC"]["cluster"]["v0"][n[j]] = QMC_cluster_v0_latin
-    sample["QMC"]["cluster"]["v1"][n[j]] = QMC_cluster_v1_latin
-    sample["QMC"]["cluster"]["v2"][n[j]] = QMC_cluster_v2_latin
+p2 = scatter(collect(100:100:2000), QMC_sd1[1,:], color = "blue", legend = false)
+title!(" Quasi-Monte Carlo - sample scale")
+xaxis!("Sample size")
+yaxis!("Standard deviation")
+
+p3 = scatter(collect(100:100:2000), MC_sd2[1,:], color = "red", legend = false)
+title!("Monte Carlo - Data scale")
+xaxis!("Sample size")
+yaxis!("Standard deviation")
+p4 = scatter(collect(100:100:2000), QMC_sd2[1,:], color = "blue", legend = false)
+title!("Quasi-Monte Carlo - Data scale")
+xaxis!("Sample size")
+yaxis!("Standard deviation")
+
+for i in 2:10
+    scatter!(p1, collect(100:100:2000), MC_sd1[i,:],color = "red", legend = false)
+    scatter!(p2,collect(100:100:2000), QMC_sd1[i,:], color = "blue", legend = false)
+    scatter!(p3, collect(100:100:2000), MC_sd2[i,:],color = "red", legend = false)
+    scatter!(p4,collect(100:100:2000), QMC_sd2[i,:], color = "blue", legend = false)
 end
 
 #complete database
@@ -206,7 +246,7 @@ mc_c3, qmc_c3, c3_pvalue, c3_prop = compare_dist(cluster3[:, 1],Vector{Float64}(
 mc_c4, qmc_c4, c4_pvalue, c4_prop = compare_dist(cluster4[:, 1],Vector{Float64}(base_v2[:, 6]), sample, 4.0, "v2", n)
 mc_c5, qmc_c5, c5_pvalue, c5_prop = compare_dist(cluster5[:, 1],Vector{Float64}(base_v2[:, 6]), sample, 5.0,"v2", n)
 mc_c6, qmc_c6, c6_pvalue, c6_prop = compare_dist(cluster6[:, 1],Vector{Float64}(base_v2[:, 6]), sample, 6.0, "v2", n)
-mc_c7, qmc_c7, c7_pvalue, c7_prop = compare_dist(cluster7[:, 1],Vector{Float64}(base_v2[:, 6]), sample, 7.0,"v2", n)
+mc_c7, qmc_c7, c7_pvalue, c7_prop= compare_dist(cluster7[:, 1],Vector{Float64}(base_v2[:, 6]), sample, 7.0,"v2", n)
 
 #Checking if the distributions of each cluster differ from other using KS-test
 cst = Vector{Float64}(collect(0:7))
@@ -222,46 +262,9 @@ for i in cst
         n+=1
         x = base_v2[findall(k -> k == i, base_v2[:, 6]), [1]][:, 1]
         y = base_v2[findall(k -> k == j, base_v2[:, 6]), [1]][:, 1]
-        p_value[m+1,n+1] = round(pvalue(ApproximateTwoSampleKSTest(x, y)), digits = 5)
+        p_value[m+1,n+1] = pvalue(ApproximateTwoSampleKSTest(x, y))
     end
     n = 0
 end
 
-# Questions
-# How many samples must we extract to get convergence for each cluster
-# If we compare distributions from categorical clustering and k-means algorithm, KS-Test provides a p-value
-# Or we can use Kullback Leibler Divergence for distributions
-# I need a relatory of the results
-# Reason for this warning, is it safe to ignore?
-# This test is inaccurate with ties
-
-"""
-TO TEST
-
-i = 100
-j = 1
-version = "v0"
-cluster = 0
-real_cluster = dados[:, 2]
-
-mc_pvalue = zeros(length(n))
-qmc_pvalue = zeros(length(n))
-
-mc_prop = zeros(length(n))
-qmc_prop = zeros(length(n))
-
-prop_real = sum(real_cluster .== cluster) / length(real_cluster)
-
-for i in n
-    mc_prop[j] = sum(sample["MC"]["cluster"][version][i] .== cluster) / i
-    qmc_prop[j] = sum(sample["QMC"]["cluster"][version][i] .== cluster) / i
-    j += 1
-end
-
-c0_prop
-
-"""
-
-# Whether or not a sample from a population represents the true proportion from the entire population.
-# The true proportion is given by clustering algorithm and it is tested versus the simulation approach
-# Given a sample size n, the proportion sampled for cluster0 is equal to the actual proportion of cluster0?
+CSV.write("Databases/KS_test_clustering.csv", DataFrame(p_value, :auto))
