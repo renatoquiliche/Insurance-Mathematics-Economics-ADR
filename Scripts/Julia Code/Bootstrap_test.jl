@@ -94,5 +94,6 @@ for i in 100:100:2000
 println("Bootstrap size = $i ", "mean: ", mean(gap[Int64(i/100), :])*100)
 end
 
+
 # Medir con MAPE, RMSE, distancia t-test, KLD
 # Incorporar las seeds en las simulaciones
