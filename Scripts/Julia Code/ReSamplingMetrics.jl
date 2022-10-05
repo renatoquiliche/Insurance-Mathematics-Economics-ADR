@@ -21,8 +21,6 @@ function MC_bootstrap(y, sample_size)
     return vec(x), hist_x
 end
 
-
-
 function QMC_LHS_empirical(y, sample_size)
     ran = rand(Uniform(0, 1), sample_size);
     s = zeros(sample_size,1)
@@ -34,6 +32,12 @@ function QMC_LHS_empirical(y, sample_size)
     hist_s = histogram!(s, label="Re-sampled QMC", fillalpha=0.7, bins=:sqrt)
     return vec(s), hist_s
 end
+
+MC_bootstrap(charges, 800)[2]
+
+
+QMC_LHS_empirical(charges, 800)[2]
+
 
 """
 Python code
