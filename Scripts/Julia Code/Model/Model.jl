@@ -78,7 +78,7 @@ function MC_bootstrap(y, sample_size)
     StatsBase.sample!(y, x, replace=true, ordered=false)
     hist_x = histogram(y, label="Sampled", bins=:sqrt)
     hist_x = histogram!(x, label="Re-sampled MC", fillalpha=0.7, bins=:sqrt)
-    return vec(x), hist_x
+    return x, hist_x
 end
 
 function QMC_LHS_empirical(y, sample_size)
@@ -96,15 +96,11 @@ end
 Data = CSV.read("Databases/contracts.csv", DataFrame)
 
 charges = Vector{Float64}(Data.charges)./1000
-#charges = Matrix{Float64}(Data[!, ["charges"]])./1000
 
+S1 = collect(5:5:300)
+Rep1 = 1
 
-S = collect(100:100:1100)
-Rep = 100
-
-resultados = zeros(6, Rep)
-resultados_opt = zeros(6, Rep)
-resultados2 = zeros(6, Rep)
+resultados = zeros(6, Rep1, length(S1))
 
 # Hyperparameters
 N = 10
@@ -116,86 +112,47 @@ Tf = 150
 M = [1e8, 1e8, 1e8]
 p = 0.3
 
-for r in 1:Rep
-    D = QMC_LHS_empirical(charges, 500)[1]
-    @time π0, T0 , z0 = estima_contrato(D)
-    resultados[:,r] = vcat(p, π0, T0, z0)
+for j in 1:length(S1)
+    for r in 1:Rep1
+        D = QMC_LHS_empirical(charges, S1[j])[1]
+        @time π0, T0 , z0 = estima_contrato(D)
+        resultados[:,r,j] = vcat(p, π0, T0, z0)
+    end
 end
 
-for r in 1:Rep
-    D = QMC_LHS_empirical(charges, 800)[1]
-    @time π0, T0 , z0 = estima_contrato(D)
-    resultados2[:,r] = vcat(p, π0, T0, z0)
-end
-
-for r in 1:Rep
-    D = QMC_LHS_empirical(charges, 2000)[1]
-    @time π0, T0 , z0 = estima_contrato(D)
-    resultados_opt[:,r] = vcat(p, π0, T0, z0)
-end
-
-D_empirical = Matrix{Float64}(Data[!, ["charges"]])./1000
-@time π0, T0 , z0 = estima_contrato(D_empirical)
-
-D_opt = QMC_LHS_empirical(charges, 2000)[1]
-@time π0_opt, T0_opt , z0_opt = estima_contrato(D_opt)
-
-resultados3 = zeros(6, Rep)
-resultados4 = zeros(6, Rep)
-resultados5 = zeros(6, Rep)
-
-for r in 1:Rep
-    D = QMC_LHS_empirical(charges, 100)[1]
-    @time π0, T0 , z0 = estima_contrato(D)
-    resultados3[:,r] = vcat(p, π0, T0, z0)
-end
-
-for r in 1:Rep
-    D = QMC_LHS_empirical(charges, 200)[1]
-    @time π0, T0 , z0 = estima_contrato(D)
-    resultados4[:,r] = vcat(p, π0, T0, z0)
-end
-
-for r in 1:Rep
-    D = QMC_LHS_empirical(charges, 300)[1]
-    @time π0, T0 , z0 = estima_contrato(D)
-    resultados5[:,r] = vcat(p, π0, T0, z0)
-end
-
-resultados6 = zeros(6, Rep)
-for r in 1:Rep
-    D = QMC_LHS_empirical(charges, 10)[1]
-    @time π0, T0 , z0 = estima_contrato(D)
-    resultados6[:,r] = vcat(p, π0, T0, z0)
-end
-
-Plots.scatter(ones(Rep, 1)*500, resultados[6,:])
-Plots.scatter!(ones(Rep, 1)*800, resultados2[6,:])
-Plots.scatter!(ones(Rep, 1)*100, resultados3[6,:])
-Plots.scatter!(ones(Rep, 1)*200, resultados4[6,:])
-Plots.scatter!(ones(Rep, 1)*300, resultados5[6,:])
-Plots.scatter!(ones(Rep, 1)*50, resultados6[6,:])
-Plots.scatter!(ones(Rep, 1)*50, resultados6[6,:])
+Plots.plot(S1, resultados[6,1,:])
 Plots.hline!([12.508336242883423])
-a
+Plots.savefig("ConvergenceRep1.png")
+CSV.write("ConvergenceRep1.csv",  Tables.table(resultados[6,1,:]), writeheader=true)
 
-Plots.scatter!(ones(Rep, 1)*2000, resultados_opt[6,:])
+S2 = collect(5:5:300)
+Rep2 = 100
 
-resultados_grid = Vector()
-for i in 10:10:800
-    D = QMC_LHS_empirical(charges, i)[1]
-    @time π0, T0 , z0 = estima_contrato(D)
-    resultados_grid = push!(resultados_grid, z0)
+resultados = zeros(6, Rep2, length(S2))
+
+# Hyperparameters
+N = 10
+α = 0.95 #quantil do Cvar
+λ = 0.5 #peso do cvar na função objetivo
+τ = 0.3 #loading factor
+Ti = 10
+Tf = 150
+M = [1e8, 1e8, 1e8]
+p = 0.3
+
+for j in 1:length(S2)
+    for r in 1:Rep2
+        D = QMC_LHS_empirical(charges, S2[j])[1]
+        @time π0, T0 , z0 = estima_contrato(D)
+        resultados[:,r,j] = vcat(p, π0, T0, z0)
+    end
 end
 
-Plots.plot(collect(10:10:800), resultados_grid)
-plot()
 
-COPT.con
+Plots.plot(S2, resultados[6,1,:])
+Plots.hline!([12.508336242883423])
+Plots.savefig("ConvergenceRep100.png")
 
-
-
-size(resultados)
-
-
-π0, T0 , z0 = estima_contrato(D0)
+for j in 1:length(S2)
+    CSV.write("ConvergenceRep100_$j.csv",  Tables.table(resultados[6,:,j]), writeheader=true)
+end
