@@ -4,7 +4,7 @@ function estima_contrato(D::Matrix)
     S,N = size(D)
     p = ones(S) * 1/S
 
-    model = Model(COPT.Optimizer)
+    model = Model(optimizer_with_attributes(COPT.Optimizer, "Threads" => 12))
     set_silent(model)
 
     @variable(model, T[1:3] ≥ 0) #valores limites do contrato e restricao A.25
@@ -87,15 +87,28 @@ function QMC_LHS_empirical(y, sample_size)
 
     idx = randperm(sample_size)
     P = ((idx-ran[:,1])/sample_size).*100 # probability of the cdf
-    s[:,1] = percentile(charges,P); # Trick for sampling
-    hist_s = histogram(y, label="Sampled", bins=:sqrt)
-    hist_s = histogram!(s, label="Re-sampled QMC", fillalpha=0.7, bins=:sqrt)
+    s[:,1] = percentile(y,P); # Trick for sampling
+    hist_s = histogram(y, label="Sampled", bins=60)
+    hist_s = histogram!(s, label="Re-sampled QMC", fillalpha=0.7, bins=60)
     return s, hist_s
 end
 
 Data = CSV.read("Databases/contracts.csv", DataFrame)
 
 charges = Vector{Float64}(Data.charges)./1000
+
+charges_non_smoker = Vector{Float64}(Data.charges[findall(i -> i == 1.0, Data.Cluster)])./1000
+charges_smoker_non_obese = Vector{Float64}(Data.charges[findall(i -> i == 2.0, Data.Cluster)])./1000
+charges_smoker_obese = Vector{Float64}(Data.charges[findall(i -> i == 3.0, Data.Cluster)])./1000
+
+
+findall(i -> i == 2.0, Data.Cluster)
+findall(i -> i == 3.0, Data.Cluster)
+
+QMC_LHS_empirical(charges, 300)[2]
+QMC_LHS_empirical(charges_non_smoker, 300)[2]
+QMC_LHS_empirical(charges_smoker_non_obese, 100)[2]
+QMC_LHS_empirical(charges_smoker_obese, 100)[2]
 
 S1 = collect(5:5:300)
 Rep1 = 1
@@ -155,4 +168,78 @@ Plots.savefig("ConvergenceRep100.png")
 
 for j in 1:length(S2)
     CSV.write("ConvergenceRep100_$j.csv",  Tables.table(resultados[6,:,j]), writeheader=true)
+end
+
+"""
+### GRID FOR CLUSTERS ###
+"""
+
+
+"""# Non-smoker
+"""
+S2 = collect(5:5:500)
+Rep2 = 1
+resultados = zeros(6, Rep2, length(S2))
+
+
+for j in 1:length(S2)
+    for r in 1:Rep2
+        D = QMC_LHS_empirical(charges_non_smoker, S2[j])[1]
+        @time π0, T0 , z0 = estima_contrato(D)
+        resultados[:,r,j] = vcat(p, π0, T0, z0)
+    end
+end
+
+
+Plots.plot(S2, resultados[6,1,:])
+Plots.savefig("Results/GridQMC-LHS-Clusters/ConvergenceRep100_non_smoker.png")
+
+for j in 1:length(S2)
+    CSV.write("Results/GridQMC-LHS-Clusters/ConvergenceRep100_non_smoker_$j.csv",  Tables.table(resultados[6,:,j]), writeheader=true)
+end
+
+"""# Smoker AND Non-obese
+"""
+S2 = collect(5:5:500)
+Rep2 = 1
+resultados = zeros(6, Rep2, length(S2))
+
+for j in 1:length(S2)
+    for r in 1:Rep2
+        D = QMC_LHS_empirical(charges_smoker_non_obese, S2[j])[1]
+        @time π0, T0 , z0 = estima_contrato(D)
+        resultados[:,r,j] = vcat(p, π0, T0, z0)
+    end
+end
+
+
+Plots.plot(S2, resultados[6,1,:])
+Plots.savefig("Results/GridQMC-LHS-Clusters2/ConvergenceRep100_smoker_non_obese.png")
+
+for j in 1:length(S2)
+    CSV.write("Results/GridQMC-LHS-Clusters2/ConvergenceRep100_smoker_non_obese_$j.csv",  Tables.table(resultados[6,:,j]), writeheader=true)
+end
+
+"""# Smoker AND Obese
+"""
+
+S2 = collect(5:5:500)
+Rep2 = 1
+resultados = zeros(6, Rep2, length(S2))
+
+
+@time for j in 1:length(S2)
+    for r in 1:Rep2
+        D = QMC_LHS_empirical(charges_smoker_obese, S2[j])[1]
+        π0, T0 , z0 = estima_contrato(D)
+        resultados[:,r,j] = vcat(p, π0, T0, z0)
+    end
+end
+
+
+Plots.plot(S2, resultados[6,1,:])
+Plots.savefig("Results/GridQMC-LHS-Clusters3/ConvergenceRep100_smoker_obese.png")
+
+for j in 1:length(S2)
+    CSV.write("Results/GridQMC-LHS-Clusters3/ConvergenceRep100_smoker_obese_$j.csv",  Tables.table(resultados[6,:,j]), writeheader=true)
 end
