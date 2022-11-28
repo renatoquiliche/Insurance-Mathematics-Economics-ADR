@@ -1,4 +1,4 @@
-using JuMP,  CSV, DataFrames, Distributions, StatsBase, Random, Plots, QuasiMonteCarlo, HiGHS, StatsPlots, HypothesisTests
+using JuMP,  CSV, DataFrames, Distributions, StatsBase, Random, Plots, QuasiMonteCarlo, HiGHS, StatsPlots, HypothesisTests, FreqTables
 
 
 
@@ -34,7 +34,7 @@ function estima_contrato(D::Matrix, α, λ, τ, Ti, Tf, parallel)
     #@constraint(model, π ≤ (1 + τ)*sum(p[s]*I[s] for s in 1:S)) #A.2 (premio maior do que a idenizacao media)
     @constraint(model, π ≤ τ*sum(p[s]*I[s] for s in 1:S)) #restringindo o premio em funcao da indenizacao media
     #@constraint(model, π ≤ 2.5*sum(p[s]*I[s] for s in 1:S)) #restringindo o premio em funcao da indenizacao media
-    @constraint(model, π ≥ 0.7*sum(p[s]*I[s] for s in 1:S)) #restringindo o premio em funcao da indenizacao media
+    @constraint(model, π ≥ 0.1*sum(p[s]*I[s] for s in 1:S)) #restringindo o premio em funcao da indenizacao media
     @constraint(model, T[2] ≤ T[3]) #A.3
     @constraint(model, Ti ≤ T[1] ≤ Tf) #A.4
     @constraint(model, [s in 1:S, n in 1:N], D[s, n] == δ1[s,n] + δ2[s,n] + δ3[s,n]) #A.5
@@ -76,15 +76,6 @@ function estima_contrato(D::Matrix, α, λ, τ, Ti, Tf, parallel)
     cvar = value(v) + sum(p[s]*value.(β)[s]/(1 - α) for s in 1:S)
 
     return value(π), value.(T), objective_value(model), expected, cvar
-end
-
-function MC_bootstrap(y, sample_size)
-    x = ones(sample_size,1)
-
-    StatsBase.sample!(y, x, replace=true, ordered=false)
-    hist_x = histogram(y, label="Sampled", bins=:sqrt)
-    hist_x = histogram!(x, label="Re-sampled MC", fillalpha=0.7, bins=:sqrt)
-    return x, hist_x
 end
 
 function QMC_LHS_empirical(data, sample_size, N, p, type)
@@ -167,18 +158,6 @@ end
 
 Data = CSV.read("Databases/contracts.csv", DataFrame)
 
-HyperP = Dict()
-#Base scenario
-HyperP["N"] = 3
-HyperP["α"] = 0.95
-HyperP["λ"] = 0.25
-HyperP["τ"] = 2.5
-HyperP["Ti"] = 1.0
-HyperP["Tf"] = 1.5
-HyperP["M"] = [1e8, 1e8, 1e8]
-HyperP["p"] = 0.1
-HyperP["sample_size"] = 700
-
 M = [1e8, 1e8, 1e8]
 
 function optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, multithreading)
@@ -235,7 +214,7 @@ function optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, multithre
     r = resultados'
 
 
-    return dict_contracts, r
+    return dict_contracts, DataFrame(r, [:Time, :Probability, :RiskPremium, :T0, :T1, :T2, :Z, :Expected, :CVaR])
 
 end
 
@@ -243,9 +222,19 @@ end
 
 """EXPERIMENTS"""
 
+#Base scenario
+N = 3
+α = 0.90
+λ = 0.10
+τ = 1.6
+Ti = 0.1
+Tf = 2.0
+p = 0.1
+sample_size = 2000
+
 
 #optimal_contract_point(3, 0.95, 0.25, 2.1, 0.1, 2.0, 0.1, 1200)
-
+"""
 for p in 0.1:0.05:2.0
     print(p)
     CSV.write("ExperimentBase_Ti_$Ti.csv", optimal_contract_point(3, 0.95, 0.25, 2.5, Ti, 2.0, p, 700))
@@ -256,17 +245,31 @@ for Ti in 0.1:0.05:2.0
     CSV.write("ExperimentBase_Ti_$Ti.csv", optimal_contract_point(3, 0.95, 0.25, 2.5, Ti, 2.0, 0.1, 700))
 end
 
-τ
-# Loading factor
-
 @time Threads.@threads for τ in 1.6:0.05:3.5
-    println("Experiment: $τ")
-    CSV.write("ExperimentBase_lf_$τ.csv", optimal_contract_point(3, 0.90, 0.10, τ, 0.1, 2.0, 0.1, 2000))
+    println("Experiment: τ=$τ")
+    CSV.write("Experiments/ExperimentBase_lf_$τ.csv", optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, "off")[2])
+end
+res
+"""
+
+@time Threads.@threads for α in 0.80:0.05:0.95
+    for λ in 0.1:0.05:0.4
+        for p in 0.05:0.05:0.25
+            for τ in 1.6:0.1:3.0
+                file = "Experiments/gridsearch/Experiment_"*"$α"*"_$λ"*"_$p"*"_$τ"*".csv"
+                println("Experiment: α=$α, λ=$λ, p=$p, τ=$τ")
+                CSV.write(file, optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, "off")[2])
+            end
+        end
+    end
 end
 
+
+
 N=3
-p = 0.2
-dict_contracts = optimal_contract_point(3, 0.85, 0.50, 2.0, 0.1, 2.0, p, 2000, "on")[1]
+p = 0.1
+sample_size = 2000
+dict_contracts, res = optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, "on")
 
 test_size = 3000
 
@@ -295,77 +298,115 @@ D3_test, cluster3 = QMC_LHS_empirical(Data3, test_size,N, p,2) #Smoker+Non Obese
 
 #D_teste, cluster_teste = QMC_LHS_empirical(Data, test_size,N, p, 2)
 #cluster_teste1 = zeros(test_size)
-S,N = size(D_unique_test)
+function calcula_receita(D, contract, dict_contracts)
 
-receita = zeros(S)
-indenizacao_aux = zeros(S, N) #Matriz de indemnizacao
-indenizacao = zeros(S)
-for s in 1:S
-    for n in 1:N
-        indenizacao_aux[s, n] = min(D_unique_test[s, n], dict_contracts["unique"][3]) #T2
-        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["unique"][4]) #T3
-        receita[s] = dict_contracts["unique"][1] .- indenizacao[s]
+    S,N = size(D)
+
+    receita = zeros(S)
+    indenizacao_aux = zeros(S, N) #Matriz de indemnizacao
+    indenizacao = zeros(S)
+    if contract==1
+        for s in 1:S
+            for n in 1:N
+                indenizacao_aux[s, n] = min(D[s, n], dict_contracts["unique"][3]) #T2
+                indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["unique"][4]) #T3
+                receita[s] = dict_contracts["unique"][1] .- indenizacao[s]
+            end
+        end
+    elseif contract==2
+        for s in 1:S
+            for n in 1:N
+                indenizacao_aux[s, n] = min(D[s, n], dict_contracts["1"][1][3]) #T2
+                indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["1"][1][4]) #T3
+                receita[s] = dict_contracts["1"][1][1] .- indenizacao[s]
+            end
+        end
+    elseif contract==3
+        for s in 1:S
+            for n in 1:N
+                indenizacao_aux[s, n] = min(D[s, n], dict_contracts["1"][0][3]) #T2
+                indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["1"][0][4]) #T3
+                receita[s] = dict_contracts["1"][0][1] .- indenizacao[s]
+            end
+        end
+    # Por Cluster
+    # C1
+    elseif contract==4
+        for s in 1:S
+            for n in 1:N
+                indenizacao_aux[s, n] = min(D[s, n], dict_contracts["2"][1][3]) #T2
+                indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["2"][1][4]) #T3
+                receita[s] = dict_contracts["2"][1][1] .- indenizacao[s]
+            end
+        end
+    # C2
+    elseif contract==5
+        for s in 1:S
+            for n in 1:N
+                indenizacao_aux[s, n] = min(D[s, n], dict_contracts["2"][2][3]) #T2
+                indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["2"][2][4]) #T3
+                receita[s] = dict_contracts["2"][2][1] .- indenizacao[s]
+            end
+        end
+    # C3
+    else 
+        for s in 1:S
+            for n in 1:N
+                indenizacao_aux[s, n] = min(D[s, n], dict_contracts["2"][3][3]) #T2
+                indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["2"][3][4]) #T3
+                receita[s] = dict_contracts["2"][3][1] .- indenizacao[s]
+            end
+        end
     end
-end
-for s in 1:S
-    for n in 1:N
-        indenizacao_aux[s, n] = min(D_smoker_test[s, n], dict_contracts["1"][1][3]) #T2
-        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["1"][1][4]) #T3
-        receita[s] = dict_contracts["1"][1][1] .- indenizacao[s]
-    end
-end
-for s in 1:S
-    for n in 1:N
-        indenizacao_aux[s, n] = min(D_nsmoker_test[s, n], dict_contracts["1"][0][3]) #T2
-        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["1"][0][4]) #T3
-        receita[s] = dict_contracts["1"][0][1] .- indenizacao[s]
-    end
-end
-# Por Cluster
-# C1
-for s in 1:S
-    for n in 1:N
-        indenizacao_aux[s, n] = min(D1_test[s, n], dict_contracts["2"][1][3]) #T2
-        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["2"][1][4]) #T3
-        receita[s] = dict_contracts["2"][1][1] .- indenizacao[s]
-    end
-end
-# C2
-for s in 1:S
-    for n in 1:N
-        indenizacao_aux[s, n] = min(D2_test[s, n], dict_contracts["2"][2][3]) #T2
-        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["2"][2][4]) #T3
-        receita[s] = dict_contracts["2"][2][1] .- indenizacao[s]
-    end
-end
-# C3
-for s in 1:S
-    for n in 1:N
-        indenizacao_aux[s, n] = min(D3_test[s, n], dict_contracts["2"][3][3]) #T2
-        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["2"][3][4]) #T3
-        receita[s] = dict_contracts["2"][3][1] .- indenizacao[s]
-    end
+    return receita, indenizacao
 end
 
-summarystats(receita)
+receita_unique = calcula_receita(D_unique_test, 1, dict_contracts)[1]
+receita_smoker = calcula_receita(D_smoker_test, 2, dict_contracts)[1]
+receita_nsmoker = calcula_receita(D_nsmoker_test, 3, dict_contracts)[1]
+receita_D1 = calcula_receita(D1_test, 4, dict_contracts)[1]
+receita_D2 = calcula_receita(D2_test, 5, dict_contracts)[1]
+receita_D3 = calcula_receita(D3_test, 6, dict_contracts)[1]
+
+CSV.write("Experiments/Receitas_base.csv", DataFrame(hcat(receita_unique, receita_smoker, receita_nsmoker, receita_D1, receita_D2, receita_D3), :auto))
+
+hcat
+boxplot(receita_unique)
+boxplot!(receita_smoker)
+boxplot!(receita_nsmoker)
+boxplot!(receita_D1)
+boxplot!(receita_D2)
+boxplot!(receita_D3)
+
+unique(Data.Cluster)
+
+wc1 = freqtable(Data.Cluster)[1]/sum(freqtable(Data.Cluster))
+wc2 = freqtable(Data.Cluster)[2]/sum(freqtable(Data.Cluster))
+wc3 = freqtable(Data.Cluster)[3]/sum(freqtable(Data.Cluster))
+
+wns = length(findall(i -> i == 1, Data.Cluster))/sum(freqtable(Data.Cluster))
+ws = length(findall(i -> i > 1, Data.Cluster))/sum(freqtable(Data.Cluster))
+
+wc1, wc2, wc3
+ws, wns
+
+D_nsmoker_test
+D1_test
+D2_test
+D3_test
+
+StatsPlots.boxplot(receita_unique)
+StatsPlots.boxplot!([receita_smoker; receita_nsmoker])
+StatsPlots.boxplot!([receita_D1; receita_D2; receita_D3])
+
+StatsPlots.boxplot!([receita_smoker.*ws; receita_nsmoker.*wns])
+
+dict_contracts["1"][1]
+density(receita_smoker)
+summarystats(receita_smoker)
+summarystats([receita_smoker; receita_nsmoker])
 density(receita)
 
-for s in 1:S
-    for n in 1:N
-        if unique
-            indenizacao_aux[s, n] = min(D_teste[s, n], dict["unique"][3]) #T2
-        else
-            indenizacao_aux[s, n] = min(D_teste[s, n], dict_contracts[type][cluster[s]][3]) #T2
-        end 
-    end
-    if unique
-        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict["unique"][4]) #T3
-        receita[s] = dict["unique"][1] .- indenizacao[s]
-    else
-        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict[type][cluster[s]][4]) #T3
-        receita[s] = dict[type][cluster[s]][1] .- indenizacao[s]
-    end
-end
 
 function calcula_receita(D::Matrix, cluster::Vector, dict::Dict, unique::Bool, type::String)
 
