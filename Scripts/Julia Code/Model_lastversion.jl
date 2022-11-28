@@ -258,13 +258,13 @@ res
             for τ in 1.6:0.1:3.0
                 file = "Experiments/gridsearch/Experiment_"*"$α"*"_$λ"*"_$p"*"_$τ"*".csv"
                 println("Experiment: α=$α, λ=$λ, p=$p, τ=$τ")
-                CSV.write(file, optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, "off")[2])
+                CSV.write(file, optimal_contract_point(N, α, λ, τ, Ti, Tf, p, 10, "off")[2])
             end
         end
     end
 end
 
-
+Pkg.status("Parsers")
 
 N=3
 p = 0.1
