@@ -2,12 +2,12 @@ using JuMP,  CSV, DataFrames, Distributions, StatsBase, Random, Plots, QuasiMont
 
 
 
-function estima_contrato(D::Matrix, α, λ, τ, Ti, Tf)
+function estima_contrato(D::Matrix, α, λ, τ, Ti, Tf, parallel)
     S,N = size(D)
     p = ones(S) * 1/S
 
     model = Model()
-    model = Model(optimizer_with_attributes(HiGHS.Optimizer,  "parallel" => "on"))
+    model = Model(optimizer_with_attributes(HiGHS.Optimizer,  "parallel" => parallel))
     set_silent(model)
 
     @variable(model, T[1:3] ≥ 0) #valores limites do contrato e restricao A.25
@@ -93,7 +93,7 @@ function QMC_LHS_empirical(data, sample_size, N, p, type)
     ran = zeros(sample_size,N)
     idx = zeros(sample_size, N)
     for n in 1:N
-        ran[:, n] = QuasiMonteCarlo.sample(sample_size,0,1,LatinHypercubeSample())
+        ran[:, n] = rand(sample_size)
         idx[:, n] = randperm(sample_size)
     end
 
@@ -111,27 +111,31 @@ function QMC_LHS_empirical(data, sample_size, N, p, type)
             #ran = QuasiMonteCarlo.sample(sample_size,0,1,LatinHypercubeSample())
             #s = zeros(sample_size,1)
             #ind_charge = rand(Bernoulli(p), 1)
-            ind_charge = 1
+            #ind_charge = 1
             #idx = randperm(1)
             P = ((idx[j,i]-ran[j,i])/sample_size)*100 # probability of the cdf
-            s_aux[j,i] = (ind_charge * percentile(data[ind_cluster,1],P) / 1000)[1]; # Trick for sampling
+            s_aux[j,i] = (percentile(data[ind_cluster,1],P) / 1000)[1]; # Trick for sampling in thousands
             #hist_s = histogram(y, label="Sampled", bins=:sqrt)
             #hist_s = histogram!(s, label="Re-sampled QMC", fillalpha=0.7, bins=:sqrt)
         end
     end
-    QMC_Bern = QuasiMonteCarlo.LatinHypercubeSample(rand(Bernoulli(p),(sample_size,N))).threading
+    P = ((idx-ran)/sample_size)
+    QMC_Bern = quantile(Bernoulli(p), P) #Transformada inversa
     s = QMC_Bern.*s_aux
     return s, cluster
 end
+"""
+Test convergencia 2000*
 
-y = Vector{Float64}()
-for s in 200:200:5000
-    y = push!(y,mean(QMC_LHS_empirical(Data_smoker, s, 3, 0.2, 1)[1][:,1]))
-end 
-
-plot(collect(200:200:5000), y)
-
-
+N=3
+p=0.3
+y_qmc = Vector{Float64}()
+grid = 10:10:2000
+for s in grid
+    y_qmc = push!(y_qmc,mean(QMC_LHS_empirical(Data_smoker, s, N, p, 1)[1]))
+end
+plot(collect(grid), y_qmc, label="QMC-LHS")
+"""
 
 function calcula_receita(D::Matrix, cluster::Vector, dict::Dict, unique::Bool, type::String)
 
@@ -163,9 +167,6 @@ end
 
 Data = CSV.read("Databases/contracts.csv", DataFrame)
 
-unique(Data[!,["Category", "Cluster"]])
-
-
 HyperP = Dict()
 #Base scenario
 HyperP["N"] = 3
@@ -173,14 +174,14 @@ HyperP["α"] = 0.95
 HyperP["λ"] = 0.25
 HyperP["τ"] = 2.5
 HyperP["Ti"] = 1.0
-HyperP["Tf"] = 2.0
+HyperP["Tf"] = 1.5
 HyperP["M"] = [1e8, 1e8, 1e8]
 HyperP["p"] = 0.1
 HyperP["sample_size"] = 700
 
 M = [1e8, 1e8, 1e8]
 
-function optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size)
+function optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, multithreading)
 
     #Sorting out data for each cluster
 
@@ -215,7 +216,7 @@ function optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size)
     D = [D_unique, D_smoker, D_nsmoker, D1,D2,D3]
 
     for j in 1:6
-        time = @elapsed π0, T0 , z0, exp, cvar = estima_contrato(D[j], α, λ, τ, Ti, Tf)
+        time = @elapsed π0, T0 , z0, exp, cvar = estima_contrato(D[j], α, λ, τ, Ti, Tf, multithreading)
         resultados[:,j] = vcat(time,p, π0, T0, z0, exp, cvar)
     end
 
@@ -234,9 +235,10 @@ function optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size)
     r = resultados'
 
 
-    return DataFrame(Matrix{}(r), [:Time, :Probability, :RiskPremium, :T0, :T1, :T2, :Z, :Expected, :CVaR])
+    return dict_contracts, r
 
 end
+
 
 
 """EXPERIMENTS"""
@@ -258,19 +260,143 @@ end
 # Loading factor
 
 @time Threads.@threads for τ in 1.6:0.05:3.5
-    print("$τ/n")
-    CSV.write("ExperimentBase_lf_$τ.csv", optimal_contract_point(3, 0.90, 0.15, τ, 0.05, 2.0, 0.1, 1300))
+    println("Experiment: $τ")
+    CSV.write("ExperimentBase_lf_$τ.csv", optimal_contract_point(3, 0.90, 0.10, τ, 0.1, 2.0, 0.1, 2000))
 end
 
-res = optimal_contract_point(3, 0.90, 0.20, 2.5, 0.05, 2.0, 0.1, 1300)
+N=3
+p = 0.2
+dict_contracts = optimal_contract_point(3, 0.85, 0.50, 2.0, 0.1, 2.0, p, 2000, "on")[1]
 
-#D_teste[1,1]
-test_size = 5000
+test_size = 3000
 
-Random.seed!(321)
-D_teste, cluster_teste = QMC_LHS_empirical(Data, test_size,N, p, 2)
+# Getting index
+ind_smoker = findall(i -> i > 1, Data.Cluster)
+ind_nsmoker = findall(i -> i == 1, Data.Cluster)
+#ind0 = findall(i -> i == 0, Data[:,8])
+ind1 = findall(i -> i == 1, Data.Cluster)
+ind2 = findall(i -> i == 2, Data.Cluster)
+ind3 = findall(i -> i == 3, Data.Cluster)
+
+Data_smoker = Data[ind_smoker,:]
+Data_nsmoker = Data[ind_nsmoker,:]
+#Data0 = Data[ind0,:]
+Data1 = Data[ind1, :]
+Data2 = Data[ind2, :]
+Data3 = Data[ind3, :]
+
+D_unique_test, cluster_unique = QMC_LHS_empirical(Data, test_size, N, p, 2)
+D_smoker_test, cluster_smoker = QMC_LHS_empirical(Data_smoker, test_size, N, p, 1)
+D_nsmoker_test, cluster_nsmoker = QMC_LHS_empirical(Data_nsmoker, test_size, N, p, 1)
+
+D1_test, cluster1 = QMC_LHS_empirical(Data1, test_size,N, p,2) #Non-smoker
+D2_test, cluster2 = QMC_LHS_empirical(Data2, test_size,N, p,2) #Soker+Obese
+D3_test, cluster3 = QMC_LHS_empirical(Data3, test_size,N, p,2) #Smoker+Non Obese
+
+#D_teste, cluster_teste = QMC_LHS_empirical(Data, test_size,N, p, 2)
+#cluster_teste1 = zeros(test_size)
+S,N = size(D_unique_test)
+
+receita = zeros(S)
+indenizacao_aux = zeros(S, N) #Matriz de indemnizacao
+indenizacao = zeros(S)
+for s in 1:S
+    for n in 1:N
+        indenizacao_aux[s, n] = min(D_unique_test[s, n], dict_contracts["unique"][3]) #T2
+        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["unique"][4]) #T3
+        receita[s] = dict_contracts["unique"][1] .- indenizacao[s]
+    end
+end
+for s in 1:S
+    for n in 1:N
+        indenizacao_aux[s, n] = min(D_smoker_test[s, n], dict_contracts["1"][1][3]) #T2
+        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["1"][1][4]) #T3
+        receita[s] = dict_contracts["1"][1][1] .- indenizacao[s]
+    end
+end
+for s in 1:S
+    for n in 1:N
+        indenizacao_aux[s, n] = min(D_nsmoker_test[s, n], dict_contracts["1"][0][3]) #T2
+        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["1"][0][4]) #T3
+        receita[s] = dict_contracts["1"][0][1] .- indenizacao[s]
+    end
+end
+# Por Cluster
+# C1
+for s in 1:S
+    for n in 1:N
+        indenizacao_aux[s, n] = min(D1_test[s, n], dict_contracts["2"][1][3]) #T2
+        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["2"][1][4]) #T3
+        receita[s] = dict_contracts["2"][1][1] .- indenizacao[s]
+    end
+end
+# C2
+for s in 1:S
+    for n in 1:N
+        indenizacao_aux[s, n] = min(D2_test[s, n], dict_contracts["2"][2][3]) #T2
+        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["2"][2][4]) #T3
+        receita[s] = dict_contracts["2"][2][1] .- indenizacao[s]
+    end
+end
+# C3
+for s in 1:S
+    for n in 1:N
+        indenizacao_aux[s, n] = min(D3_test[s, n], dict_contracts["2"][3][3]) #T2
+        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict_contracts["2"][3][4]) #T3
+        receita[s] = dict_contracts["2"][3][1] .- indenizacao[s]
+    end
+end
+
+summarystats(receita)
+density(receita)
+
+for s in 1:S
+    for n in 1:N
+        if unique
+            indenizacao_aux[s, n] = min(D_teste[s, n], dict["unique"][3]) #T2
+        else
+            indenizacao_aux[s, n] = min(D_teste[s, n], dict_contracts[type][cluster[s]][3]) #T2
+        end 
+    end
+    if unique
+        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict["unique"][4]) #T3
+        receita[s] = dict["unique"][1] .- indenizacao[s]
+    else
+        indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict[type][cluster[s]][4]) #T3
+        receita[s] = dict[type][cluster[s]][1] .- indenizacao[s]
+    end
+end
+
+function calcula_receita(D::Matrix, cluster::Vector, dict::Dict, unique::Bool, type::String)
+
+    S,N = size(D)
+
+    receita = zeros(S)
+    indenizacao_aux = zeros(S, N) #Matriz de indemnizacao
+    indenizacao = zeros(S) #Indemnizacao total por escenario
+
+    dict_contracts["unique"][cluster_teste[100]][3]
+    for s in 1:S
+        for n in 1:N
+            if unique
+                indenizacao_aux[s, n] = min(D_teste[s, n], dict["unique"][3]) #T2
+            else
+                indenizacao_aux[s, n] = min(D_teste[s, n], dict_contracts[type][cluster[s]][3]) #T2
+            end 
+        end
+        if unique
+            indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict["unique"][4]) #T3
+            receita[s] = dict["unique"][1] .- indenizacao[s]
+        else
+            indenizacao[s] = min(sum(indenizacao_aux[s,:]), dict[type][cluster[s]][4]) #T3
+            receita[s] = dict[type][cluster[s]][1] .- indenizacao[s]
+        end
+    end
+
+    return receita, indenizacao
+end
+
 cluster_teste1 = zeros(test_size)
-
 for i in 1:test_size
     if cluster_teste[i] == 2 || cluster_teste[i] == 3
         cluster_teste1[i] = 1
@@ -295,9 +421,9 @@ receita = vcat(receita_unique, receita_smoker, receita_cluster)
 contrato = vcat(repeat(["Contrato único"], inner = test_size), repeat(["Dois contratos"], inner = test_size), repeat(["Tres contratos"], inner = test_size))
 
 
-StatsPlots.violin(contrato, log.(receita.+100), color = "gray", alpha = 1)
-boxplot!(contrato, log.(receita.+100), colour = "blue", legend = false)
-hline!(hline!([log(100)]))
+StatsPlots.violin(contrato, log.(receita.+1000), color = "gray", alpha = 1)
+boxplot!(contrato, log.(receita.+1000), colour = "blue", legend = false)
+hline!(hline!([log(1000)]))
 title!("Distribuição das receitas (p = $p)")
 yaxis!("Receita")
 
