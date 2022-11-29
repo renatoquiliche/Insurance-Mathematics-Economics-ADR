@@ -1,5 +1,5 @@
 using JuMP,  CSV, DataFrames, Distributions, StatsBase, Random, Plots, QuasiMonteCarlo, HiGHS, StatsPlots, HypothesisTests, FreqTables
-
+using Gurobi
 
 
 function estima_contrato(D::Matrix, α, λ, τ, Ti, Tf, parallel)
@@ -7,7 +7,7 @@ function estima_contrato(D::Matrix, α, λ, τ, Ti, Tf, parallel)
     p = ones(S) * 1/S
 
     model = Model()
-    model = Model(optimizer_with_attributes(HiGHS.Optimizer,  "parallel" => parallel))
+    model = Model(optimizer_with_attributes(Gurobi.Optimizer,  "Threads" => 1))
     set_silent(model)
 
     @variable(model, T[1:3] ≥ 0) #valores limites do contrato e restricao A.25
@@ -230,7 +230,7 @@ N = 3
 Ti = 0.1
 Tf = 2.0
 p = 0.1
-sample_size = 2000
+sample_size = 1500
 
 
 #optimal_contract_point(3, 0.95, 0.25, 2.1, 0.1, 2.0, 0.1, 1200)
@@ -252,23 +252,23 @@ end
 res
 """
 
-@time Threads.@threads for α in 0.80:0.05:0.95
+@time for α in 0.8:0.05:0.95
     for λ in 0.1:0.05:0.4
         for p in 0.05:0.05:0.25
-            for τ in 1.6:0.1:3.0
+            Threads.@threads for τ in 1.6:0.1:2.7
                 file = "Experiments/gridsearch/Experiment_"*"$α"*"_$λ"*"_$p"*"_$τ"*".csv"
                 println("Experiment: α=$α, λ=$λ, p=$p, τ=$τ")
-                CSV.write(file, optimal_contract_point(N, α, λ, τ, Ti, Tf, p, 10, "off")[2])
+                CSV.write(file, optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, "off")[2])
             end
         end
     end
-end
+end     
 
-Pkg.status("Parsers")
+Pkg.update("Parsers")
 
 N=3
 p = 0.1
-sample_size = 2000
+sample_size = 1500
 dict_contracts, res = optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, "on")
 
 test_size = 3000
