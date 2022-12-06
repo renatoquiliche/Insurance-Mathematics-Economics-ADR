@@ -1,5 +1,5 @@
 using JuMP,  CSV, DataFrames, Distributions, StatsBase, Random, Plots, QuasiMonteCarlo, HiGHS, StatsPlots, HypothesisTests, FreqTables
-using Gurobi
+
 
 
 function estima_contrato(D::Matrix, α, λ, τ, Ti, Tf, parallel)
@@ -7,7 +7,7 @@ function estima_contrato(D::Matrix, α, λ, τ, Ti, Tf, parallel)
     p = ones(S) * 1/S
 
     model = Model()
-    model = Model(optimizer_with_attributes(Gurobi.Optimizer,  "Threads" => 1))
+    model = Model(optimizer_with_attributes(HiGHS.Optimizer,  "parallel" => parallel))
     set_silent(model)
 
     @variable(model, T[1:3] ≥ 0) #valores limites do contrato e restricao A.25
@@ -116,12 +116,12 @@ function QMC_LHS_empirical(data, sample_size, N, p, type)
     return s, cluster
 end
 """
-Test convergencia 2000*
+Test convergencia 1200*
 
 N=3
 p=0.3
 y_qmc = Vector{Float64}()
-grid = 10:10:2000
+grid = 10:10:2500
 for s in grid
     y_qmc = push!(y_qmc,mean(QMC_LHS_empirical(Data_smoker, s, N, p, 1)[1]))
 end
@@ -219,7 +219,6 @@ function optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, multithre
 end
 
 
-
 """EXPERIMENTS"""
 
 #Base scenario
@@ -230,45 +229,25 @@ N = 3
 Ti = 0.1
 Tf = 2.0
 p = 0.1
-sample_size = 1500
+sample_size = 1200
 
-
-#optimal_contract_point(3, 0.95, 0.25, 2.1, 0.1, 2.0, 0.1, 1200)
-"""
-for p in 0.1:0.05:2.0
-    print(p)
-    CSV.write("ExperimentBase_Ti_$Ti.csv", optimal_contract_point(3, 0.95, 0.25, 2.5, Ti, 2.0, p, 700))
-end
-
-for Ti in 0.1:0.05:2.0
-    print(Ti)
-    CSV.write("ExperimentBase_Ti_$Ti.csv", optimal_contract_point(3, 0.95, 0.25, 2.5, Ti, 2.0, 0.1, 700))
-end
-
-@time Threads.@threads for τ in 1.6:0.05:3.5
-    println("Experiment: τ=$τ")
-    CSV.write("Experiments/ExperimentBase_lf_$τ.csv", optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, "off")[2])
-end
-res
-"""
-
-@time for α in 0.8:0.05:0.95
+@time for α in 0.80:0.05:0.95
     for λ in 0.1:0.05:0.4
         for p in 0.05:0.05:0.25
-            Threads.@threads for τ in 1.6:0.1:2.7
+            Threads.@threads for τ in 1.6:0.1:3.0
                 file = "Experiments/gridsearch/Experiment_"*"$α"*"_$λ"*"_$p"*"_$τ"*".csv"
                 println("Experiment: α=$α, λ=$λ, p=$p, τ=$τ")
                 CSV.write(file, optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, "off")[2])
             end
         end
     end
-end     
+end
 
-Pkg.update("Parsers")
+
 
 N=3
 p = 0.1
-sample_size = 1500
+sample_size = 1000
 dict_contracts, res = optimal_contract_point(N, α, λ, τ, Ti, Tf, p, sample_size, "on")
 
 test_size = 3000
